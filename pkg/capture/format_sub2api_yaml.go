@@ -7,20 +7,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Sub2APIFormatter writes records as Sub2API YAML profiles.
-type Sub2APIFormatter struct{}
+// Sub2APIYAMLFormatter writes records as Sub2API YAML profiles.
+type Sub2APIYAMLFormatter struct{}
 
-func (Sub2APIFormatter) Suffix() string { return ".sub2api.yml" }
+func (Sub2APIYAMLFormatter) Suffix() string { return ".sub2api.yml" }
 
-func (Sub2APIFormatter) Format(record Record) ([]byte, error) {
+func (Sub2APIYAMLFormatter) Format(record Record) ([]byte, error) {
 	var buf strings.Builder
-	if err := formatSub2APIRecord(&buf, record); err != nil {
+	if err := formatSub2APIYAMLRecord(&buf, record); err != nil {
 		return nil, fmt.Errorf("format record: %w", err)
 	}
 	return []byte(buf.String()), nil
 }
 
-func formatSub2APIRecord(buf *strings.Builder, rec Record) error {
+func formatSub2APIYAMLRecord(buf *strings.Builder, rec Record) error {
 	key := buildProfileKey(rec)
 	name := buildProfileName(rec)
 

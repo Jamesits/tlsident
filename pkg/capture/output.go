@@ -11,7 +11,7 @@ import (
 
 // DefaultFormatters returns the set of formatters enabled by default.
 func DefaultFormatters() []Formatter {
-	return []Formatter{JSONFormatter{}, Sub2APIFormatter{}}
+	return []Formatter{JSONFormatter{}, Sub2APIYAMLFormatter{}, Sub2APIJSONFormatter{}}
 }
 
 type OutputWriter struct {

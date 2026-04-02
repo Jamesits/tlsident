@@ -1,0 +1,49 @@
+Write a golang program for collecting TLS and HTTP fingerprint of Claude Code automatically.
+It should consist of a TLS server that collects the JA3/JA4/HTTP2/TLS Extension information, and a HTTP server implementing the minimal Claude Code API that collect its UA and request info.
+Interface definition:
+When the server starts, we can run
+```shell
+export ANTHROPIC_BASE_URL=https://localhost:8443
+export ANTHROPIC_AUTH_TOKEN=anything
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+claude "test"
+```
+And the server will returns an array of the following information (one for each request, since one claude code run will result in multiple model requests):
+```
+connection:
+  client_ip: 127.0.0.1
+  timestamp: <unix timestamp>
+tls:
+  JA3 Hash: 44f88fca027f27bab4bb08d4af15f23e
+  JA3: 771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49161-49171-49162-49172-156-157-47-53,0-65037-23-65281-10-11-35-16-5-13-18-51-45-43,29-23-24,0
+  JA4: t13d1714h1_5b57614c22b0_7baf387fc6ff
+  enable_grease: false
+  cipher_suites: [4865, 4866, 4867, 49195, 49199, 49196, 49200, 52393, 52392, 49161, 49171, 49162, 49172, 156, 157, 47, 53]
+  curves: [29, 23, 24]
+  point_formats: [0]
+  signature_algorithms: [1027, 2052, 1025, 1283, 2053, 1281, 2054, 1537, 513]
+  alpn_protocols: ["http/1.1"]
+  supported_versions: [772, 771]
+  key_share_groups: [29]
+  psk_modes: [1]
+  # -- Reference (extension order, cert compression) --
+  extensions: [0, 65037, 23, 65281, 10, 11, 35, 16, 5, 13, 18, 51, 45, 43]
+  compress_cert_algos: null
+http2:
+  fingerprint: '|00|0|'
+  akamai_fingerprint: 1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
+http:
+  program: claude-code
+  user_agent: claude-cli/2.1.86 (external, cli)
+  model: claude-sonnet-4-6
+  OS: Linux
+  Arch: x64
+  Runtime: node
+  Runtime Version: v24.3.0
+  Lang: js
+  SDK Version: 0.74.0
+```
+Requirements:
+- Adhere to Golang standard project layout (cmd/tlsident, pkg/...)
+- NO unit tests
+- Make the tls server and http server modular and pluggable (we might add support to more clients later)

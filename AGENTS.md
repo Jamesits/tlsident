@@ -1,6 +1,6 @@
 # Agent Notes
 
-NO NEED to read README.md.
+NO NEED to read `README.md`. DO NOT read inside `doc/prompts`.
 
 ## Development
 
@@ -10,7 +10,11 @@ Building:
 goreleaser build --snapshot --clean --single-target
 ```
 
-Find the artifacts under `dist/tlsident_{{ .Target }}`.
+Run with:
+
+```shell
+./dist/tlsident_{{ .Target }}/tlsident -outdir ./results
+```
 
 Verification after code change:
 
@@ -22,3 +26,7 @@ golangci-lint run
 # Full build
 goreleaser release --snapshot --clean
 ```
+
+## Code Style
+
+- DO NOT write unit tests

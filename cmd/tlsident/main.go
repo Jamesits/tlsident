@@ -13,7 +13,7 @@ import (
 
 func main() {
 	listenAddress := flag.String("listen", ":8443", "address to listen on")
-	outputDirectory := flag.String("outdir", "", "directory to persist capture snapshots as sequential .tlsident.json files")
+	outputDirectory := flag.String("outdir", "", "directory to persist capture snapshots as sequential .tlsident.json, .sub2api.yml, and .sub2api.json files")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))

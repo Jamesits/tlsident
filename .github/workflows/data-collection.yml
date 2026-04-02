@@ -1,0 +1,247 @@
+name: Data Collection
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+  push:
+    paths-ignore:
+      - 'README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  hosted:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 20
+    env:
+      ANTHROPIC_API_KEY: 'dummy'
+      ANTHROPIC_AUTH_TOKEN: 'dummy'
+      ANTHROPIC_BASE_URL: https://localhost:8443
+      DISABLE_AUTOUPDATER: '1'
+      NODE_TLS_REJECT_UNAUTHORIZED: '0'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-native
+            runs_on: windows-latest
+          - name: macos-native
+            runs_on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build tlsident
+        if: runner.os != 'Windows'
+        env:
+          CGO_ENABLED: 0
+        run: |
+          go build -o "$RUNNER_TEMP/tlsident" ./cmd/tlsident
+
+      - name: Build tlsident
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CGO_ENABLED: 0
+        run: |
+          go build -o "$env:RUNNER_TEMP\tlsident.exe" ./cmd/tlsident
+
+      - name: Install Claude Code
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          claude --version
+
+      - name: Install Claude Code
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm https://claude.ai/install.ps1 | iex
+          "$env:USERPROFILE\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
+          claude --version
+
+      - name: Run tlsident flow
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p results
+          "$RUNNER_TEMP/tlsident" -outdir results >"$RUNNER_TEMP/tlsident.log" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          curl --silent --show-error --fail --insecure \
+            --retry 20 \
+            --retry-delay 1 \
+            --retry-connrefused \
+            https://localhost:8443/captures >/dev/null
+
+          claude --bare -p "Reply with the exact text ok." --no-session-persistence --output-format json \
+            >"$RUNNER_TEMP/claude-output.json"
+
+          find results -maxdepth 1 -type f | grep -q .
+
+      - name: Run tlsident flow
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path results | Out-Null
+          $stdoutLog = Join-Path $env:RUNNER_TEMP 'tlsident.stdout.log'
+          $stderrLog = Join-Path $env:RUNNER_TEMP 'tlsident.stderr.log'
+          $proc = Start-Process -FilePath (Join-Path $env:RUNNER_TEMP 'tlsident.exe') -ArgumentList '-outdir', 'results' -PassThru -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 20; $i++) {
+              try {
+                Invoke-WebRequest -Uri 'https://localhost:8443/captures' -SkipCertificateCheck | Out-Null
+                $ready = $true
+                break
+              } catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+
+            if (-not $ready) {
+              throw 'tlsident did not become ready in time'
+            }
+
+            claude --bare -p 'Reply with the exact text ok.' --no-session-persistence --output-format json |
+              Out-File -FilePath (Join-Path $env:RUNNER_TEMP 'claude-output.json') -Encoding utf8
+
+            if (-not (Get-ChildItem -Path results -File)) {
+              throw 'tlsident did not produce any capture files'
+            }
+          } finally {
+            if ($proc -and -not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force
+            }
+          }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-results
+          path: |
+            results
+            ${{ runner.temp }}/tlsident*.log
+          if-no-files-found: warn
+
+  linux:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.container }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      ANTHROPIC_API_KEY: dummy-key
+      ANTHROPIC_AUTH_TOKEN: anything
+      ANTHROPIC_BASE_URL: https://localhost:8443
+      DISABLE_AUTOUPDATER: '1'
+      NODE_TLS_REJECT_UNAUTHORIZED: '0'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-24.04-native
+            container: ubuntu:24.04
+            distro: ubuntu
+            install_method: native
+          - name: archlinux-native
+            container: archlinux:latest
+            distro: arch
+            install_method: native
+          - name: archlinux-aur
+            container: archlinux:latest
+            distro: arch
+            install_method: aur
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install container dependencies
+        run: |
+          if [ "${{ matrix.distro }}" = "ubuntu" ]; then
+            apt-get update
+            apt-get install -y ca-certificates curl git jq
+          else
+            pacman -Syu --noconfirm --needed ca-certificates curl git jq base-devel sudo
+          fi
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build tlsident
+        env:
+          CGO_ENABLED: 0
+        run: |
+          go build -o "$RUNNER_TEMP/tlsident" ./cmd/tlsident
+
+      - name: Install Claude Code
+        if: matrix.install_method == 'native'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          claude --version
+
+      - name: Install Claude Code from the AUR
+        if: matrix.install_method == 'aur'
+        run: |
+          useradd -m builder
+          install -d /etc/sudoers.d
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+
+          su builder -c 'git clone https://aur.archlinux.org/claude-code.git /tmp/claude-code'
+          su builder -c 'cd /tmp/claude-code && makepkg -si --noconfirm --needed'
+
+          claude --version
+
+      - name: Run tlsident flow
+        run: |
+          mkdir -p results
+          "$RUNNER_TEMP/tlsident" -outdir results >"$RUNNER_TEMP/tlsident.log" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          curl --silent --show-error --fail --insecure \
+            --retry 20 \
+            --retry-delay 1 \
+            --retry-connrefused \
+            https://localhost:8443/captures >/dev/null
+
+          claude --bare -p "Reply with the exact text ok." --no-session-persistence --output-format json \
+            >"$RUNNER_TEMP/claude-output.json"
+
+          find results -maxdepth 1 -type f | grep -q .
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-results
+          path: |
+            results
+            ${{ runner.temp }}/tlsident*.log
+          if-no-files-found: warn

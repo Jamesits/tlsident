@@ -1,0 +1,136 @@
+name: Online Test
+
+on:
+  workflow_run:
+    workflows:
+      - Build
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  compare-with-sub2api:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LOCAL_RESULTS_DIR: ${{ runner.temp }}/local-results
+      ONLINE_TEST_DIR: ${{ runner.temp }}/online-test
+      UPSTREAM_AFTER_JSON: ${{ runner.temp }}/online-test/upstream-after.json
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: dist
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes jq
+
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Start tlsident
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$LOCAL_RESULTS_DIR" "$ONLINE_TEST_DIR"
+
+          TLSIDENT_BIN="$(find dist -type f -path '*linux_amd64*' -name tlsident | head -n 1)"
+          if [ -z "$TLSIDENT_BIN" ]; then
+            echo "failed to locate linux_amd64 tlsident binary in dist artifact" >&2
+            exit 1
+          fi
+
+          chmod +x "$TLSIDENT_BIN"
+          "$TLSIDENT_BIN" -outdir "$LOCAL_RESULTS_DIR" > "$ONLINE_TEST_DIR/tlsident.log" 2>&1 &
+          echo $! > "$ONLINE_TEST_DIR/tlsident.pid"
+
+          for _ in $(seq 1 20); do
+            if curl -ksSf https://localhost:8443/captures > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "tlsident did not become ready" >&2
+          exit 1
+
+      - name: Capture local fingerprints
+        shell: bash
+        env:
+          ANTHROPIC_BASE_URL: https://localhost:8443
+          ANTHROPIC_AUTH_TOKEN: 'dummy'
+          DISABLE_AUTOUPDATER: '1'
+          NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        run: |
+          set -euo pipefail
+          claude -p --output-format json "test" > "$ONLINE_TEST_DIR/local-claude.json"
+
+      - name: Capture upstream fingerprints
+        shell: bash
+        env:
+          ANTHROPIC_BASE_URL: https://tls.sub2api.org:8090
+          DISABLE_AUTOUPDATER: '1'
+          NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        run: |
+          set -euo pipefail
+
+          export ANTHROPIC_AUTH_TOKEN="$(openssl rand -hex 16)"
+
+          BEFORE_JSON="$ONLINE_TEST_DIR/upstream-before.json"
+          curl -fsSL "https://tls.sub2api.org/api/latest?token=${SUB2API_API_TOKEN}" -o "$BEFORE_JSON"
+          baseline_id="$(jq -r '.fingerprints[0].id // empty' "$BEFORE_JSON")"
+
+          claude -p --output-format json "test" > "$ONLINE_TEST_DIR/upstream-claude.json"
+          sleep 3
+
+          for _ in $(seq 1 20); do
+            curl -fsSL "https://tls.sub2api.org/api/latest?token=${SUB2API_API_TOKEN}" -o "$UPSTREAM_AFTER_JSON"
+            latest_id="$(jq -r '.fingerprints[0].id // empty' "$UPSTREAM_AFTER_JSON")"
+            latest_count="$(jq -r '.count // 0' "$UPSTREAM_AFTER_JSON")"
+
+            if [ "$latest_count" -gt 0 ] && [ "$latest_id" != "$baseline_id" ]; then
+              exit 0
+            fi
+
+            sleep 3
+          done
+
+          echo "sub2api did not publish a fresh fingerprint set" >&2
+          exit 1
+
+      - name: Compare normalized fingerprints
+        shell: bash
+        run: bash ./.github/scripts/compare-sub2api.sh "$LOCAL_RESULTS_DIR" "$UPSTREAM_AFTER_JSON" "$ONLINE_TEST_DIR"
+
+      - name: Stop tlsident
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$ONLINE_TEST_DIR/tlsident.pid" ]; then
+            kill "$(cat "$ONLINE_TEST_DIR/tlsident.pid")" || true
+          fi
+
+      - name: Upload online test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-test-artifacts
+          path: |
+            ${{ runner.temp }}/local-results
+            ${{ runner.temp }}/online-test

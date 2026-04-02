@@ -8,7 +8,7 @@ Collects TLS, HTTP2 and HTTP fingerprints of certain AI agents, compatible with 
 ## Run
 
 ```bash
-go run ./cmd/tlsident -outdir ./results
+tlsident -outdir ./results
 ```
 
 Then point Claude Code at the local endpoint:
@@ -17,7 +17,7 @@ Then point Claude Code at the local endpoint:
 ANTHROPIC_BASE_URL=https://localhost:8443 ANTHROPIC_API_KEY='' ANTHROPIC_AUTH_TOKEN=anything NODE_TLS_REJECT_UNAUTHORIZED=0 claude "test"
 ```
 
-## Release
+Release build:
 
 ```bash
 goreleaser release --snapshot --clean
