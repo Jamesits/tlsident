@@ -1,0 +1,47 @@
+version: 2
+
+project_name: tlsident
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: tlsident
+    main: ./cmd/tlsident
+    binary: tlsident
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X tlsident/pkg/version.Version={{.Version}}
+      - -X tlsident/pkg/version.Commit={{.Commit}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: bundles
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
