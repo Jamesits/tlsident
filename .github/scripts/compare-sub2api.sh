@@ -30,17 +30,16 @@ fi
 
 jq --argjson count "$local_count" '{count: ($count), fingerprints: (.fingerprints[0:$count] // [])}' "$upstream_json" > "$upstream_raw"
 
-normalize_payload='def normalize_fingerprint: {
+normalize_payload='def normalize_extensions:
+  (.extensions // [] | map(select(. != 21)));
+def normalize_fingerprint: {
   model,
-  ja3_raw,
-  ja3_hash,
-  ja4,
   http2,
   user_agent,
   cipher_suites,
   curves,
   point_formats,
-  extensions,
+  extensions: normalize_extensions,
   signature_algorithms,
   alpn_protocols,
   supported_versions,
