@@ -89,7 +89,7 @@ jobs:
           trap cleanup EXIT
           sleep 3
 
-          claude --bare -p "test" --no-session-persistence --output-format json
+          claude --bare -p "test" --no-session-persistence
 
           find results -maxdepth 1 -type f | grep -q .
 
@@ -104,7 +104,7 @@ jobs:
           try {
             Start-Sleep -Seconds 3
 
-            claude --bare -p 'test' --no-session-persistence --output-format json
+            claude --bare -p 'test' --no-session-persistence
           } finally {
             if ($proc -and -not $proc.HasExited) {
               Stop-Process -Id $proc.Id -Force
@@ -213,7 +213,7 @@ jobs:
           trap cleanup EXIT
           sleep 3
 
-          claude --bare -p "test" --no-session-persistence --output-format json
+          claude --bare -p "test" --no-session-persistence
 
       - name: Upload results
         if: always()
