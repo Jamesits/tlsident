@@ -75,34 +75,35 @@ jobs:
           echo "tlsident did not become ready" >&2
           exit 1
 
-      - name: Capture local fingerprints
-        shell: bash
-        env:
-          ANTHROPIC_BASE_URL: https://localhost:8443
-          ANTHROPIC_AUTH_TOKEN: 'dummy'
-          DISABLE_AUTOUPDATER: '1'
-          NODE_TLS_REJECT_UNAUTHORIZED: '0'
-        run: |
-          set -euo pipefail
-          claude -p --output-format json "test" > "$ONLINE_TEST_DIR/local-claude.json"
+       - name: Capture local fingerprints
+         shell: bash
+         env:
+           ANTHROPIC_BASE_URL: https://localhost:8443
+           ANTHROPIC_AUTH_TOKEN: 'dummy'
+           DISABLE_AUTOUPDATER: '1'
+           NODE_TLS_REJECT_UNAUTHORIZED: '0'
+         run: |
+           set -euo pipefail
+           claude --bare -p "test" --no-session-persistence --output-format json > "$ONLINE_TEST_DIR/local-claude.json" || true
+           find "$LOCAL_RESULTS_DIR" -maxdepth 1 -type f -name '*.sub2api.json' | grep -q .
 
-      - name: Capture upstream fingerprints
-        shell: bash
-        env:
-          ANTHROPIC_BASE_URL: https://tls.sub2api.org:8090
-          DISABLE_AUTOUPDATER: '1'
+       - name: Capture upstream fingerprints
+         shell: bash
+         env:
+           ANTHROPIC_BASE_URL: https://tls.sub2api.org:8090
+           DISABLE_AUTOUPDATER: '1'
           NODE_TLS_REJECT_UNAUTHORIZED: '0'
         run: |
           set -euo pipefail
 
           export ANTHROPIC_AUTH_TOKEN="$(openssl rand -hex 16)"
 
-          BEFORE_JSON="$ONLINE_TEST_DIR/upstream-before.json"
-          curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "$BEFORE_JSON"
-          baseline_id="$(jq -r '.fingerprints[0].id // empty' "$BEFORE_JSON")"
+           BEFORE_JSON="$ONLINE_TEST_DIR/upstream-before.json"
+           curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "$BEFORE_JSON"
+           baseline_id="$(jq -r '.fingerprints[0].id // empty' "$BEFORE_JSON")"
 
-          claude -p --output-format json "test" > "$ONLINE_TEST_DIR/upstream-claude.json"
-          sleep 3
+           claude --bare -p "test" --no-session-persistence --output-format json > "$ONLINE_TEST_DIR/upstream-claude.json" || true
+           sleep 3
 
           for _ in $(seq 1 20); do
             curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "$UPSTREAM_AFTER_JSON"
