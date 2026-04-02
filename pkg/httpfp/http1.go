@@ -52,7 +52,7 @@ func (h *HTTP1Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 		response := h.handler.Handle(api.RequestContext{
 			Connection: connection,
 			TLS:        tlsInfo,
-			HTTP2:      capture.HTTP2Info{Fingerprint: "|00|0|", AkamaiFingerprint: "|00|0|"},
+			HTTP2:      capture.HTTP2Info{Fingerprint: "|00|0|"},
 			Method:     request.Method,
 			Path:       request.URL.Path,
 			Headers:    normalizeHeaderMap(request.Header),

@@ -1,6 +1,6 @@
 # Agent Notes
 
-NO NEED to read `README.md`. DO NOT read inside `doc/prompts`.
+NO NEED to read `README.md`. DO NOT read inside `docs/prompts`.
 
 ## Development
 

@@ -91,9 +91,6 @@ func formatSub2APITimestamp(timestamp int64) string {
 }
 
 func sub2APIHTTP2Fingerprint(http2 HTTP2Info) string {
-	if http2.AkamaiFingerprint != "" {
-		return http2.AkamaiFingerprint
-	}
 	return http2.Fingerprint
 }
 

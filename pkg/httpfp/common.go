@@ -65,8 +65,7 @@ func (t *HTTP2Tracker) Snapshot() capture.HTTP2Info {
 	pseudoHeaders := strings.Join(t.pseudoHeaderOrder, ",")
 	fingerprint := fmt.Sprintf("%s|%s|%s|%s", settings, windowUpdate, priorities, pseudoHeaders)
 	return capture.HTTP2Info{
-		Fingerprint:       fingerprint,
-		AkamaiFingerprint: fingerprint,
+		Fingerprint: fingerprint,
 	}
 }
 

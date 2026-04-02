@@ -36,8 +36,7 @@ type TLSInfo struct {
 }
 
 type HTTP2Info struct {
-	Fingerprint       string `json:"fingerprint" yaml:"fingerprint" toml:"fingerprint"`
-	AkamaiFingerprint string `json:"akamai_fingerprint" yaml:"akamai_fingerprint" toml:"akamai_fingerprint"`
+	Fingerprint string `json:"fingerprint" yaml:"fingerprint" toml:"fingerprint"`
 }
 
 type HTTPInfo struct {
