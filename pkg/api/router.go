@@ -1,18 +1,27 @@
 package api
 
+import (
+	"log/slog"
+
+	"tlsident/pkg/api/anthropic"
+	"tlsident/pkg/api/common"
+	"tlsident/pkg/api/peetws"
+	"tlsident/pkg/capture"
+)
+
 type Router struct {
-	anthropic Handler
-	peetws    Handler
+	anthropic common.Handler
+	peetws    common.Handler
 }
 
-func NewRouter(anthropic, peetws Handler) *Router {
+func New(store *capture.Store, logger *slog.Logger) *Router {
 	return &Router{
-		anthropic: anthropic,
-		peetws:    peetws,
+		anthropic: anthropic.NewService(store, logger),
+		peetws:    peetws.NewService(),
 	}
 }
 
-func (r *Router) Handle(ctx RequestContext) Response {
+func (r *Router) Handle(ctx common.RequestContext) common.Response {
 	switch ctx.Path {
 	case "/api/all", "/api/clean", "/api/tls":
 		return r.peetws.Handle(ctx)

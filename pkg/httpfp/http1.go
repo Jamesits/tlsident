@@ -13,17 +13,17 @@ import (
 	"strings"
 	"time"
 
-	"tlsident/pkg/api"
+	apicommon "tlsident/pkg/api/common"
 	"tlsident/pkg/capture"
 	"tlsident/pkg/tlsfp"
 )
 
 type HTTP1Handler struct {
-	handler api.Handler
+	handler apicommon.Handler
 	logger  *slog.Logger
 }
 
-func NewHTTP1Handler(handler api.Handler, logger *slog.Logger) *HTTP1Handler {
+func NewHTTP1Handler(handler apicommon.Handler, logger *slog.Logger) *HTTP1Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -52,7 +52,7 @@ func (h *HTTP1Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 			return err
 		}
 
-		response := h.handler.Handle(api.RequestContext{
+		response := h.handler.Handle(apicommon.RequestContext{
 			Connection:  connection,
 			ClientHello: clientHello,
 			TLS:         tlsInfo,
@@ -60,7 +60,7 @@ func (h *HTTP1Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 			Protocol:    "HTTP/1.1",
 			Host:        request.Host,
 			ClientPort:  clientPort,
-			HTTP1: api.HTTP1RequestInfo{
+			HTTP1: apicommon.HTTP1RequestInfo{
 				HeaderLines: http1HeaderLines(request),
 			},
 			Method:  request.Method,

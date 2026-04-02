@@ -12,8 +12,7 @@ import (
 	"time"
 
 	"tlsident/pkg/api"
-	"tlsident/pkg/api/anthropic"
-	"tlsident/pkg/api/peetws"
+	apicommon "tlsident/pkg/api/common"
 	"tlsident/pkg/capture"
 	"tlsident/pkg/certutil"
 	"tlsident/pkg/httpfp"
@@ -30,7 +29,7 @@ type Server struct {
 	config       Config
 	listener     net.Listener
 	tlsConfig    *tls.Config
-	handler      api.Handler
+	handler      apicommon.Handler
 	http1Handler *httpfp.HTTP1Handler
 	http2Handler *httpfp.HTTP2Handler
 	waitGroup    sync.WaitGroup
@@ -55,10 +54,7 @@ func New(config Config) (*Server, error) {
 	}
 
 	store := capture.NewStore(writer)
-	handler := api.NewRouter(
-		anthropic.NewService(store, config.Logger),
-		peetws.NewService(),
-	)
+	handler := api.New(store, config.Logger)
 
 	return &Server{
 		config: config,

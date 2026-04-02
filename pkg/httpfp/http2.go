@@ -13,7 +13,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
-	"tlsident/pkg/api"
+	apicommon "tlsident/pkg/api/common"
 	"tlsident/pkg/capture"
 	"tlsident/pkg/tlsfp"
 )
@@ -21,11 +21,11 @@ import (
 const clientPreface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
 type HTTP2Handler struct {
-	handler api.Handler
+	handler apicommon.Handler
 	logger  *slog.Logger
 }
 
-func NewHTTP2Handler(handler api.Handler, logger *slog.Logger) *HTTP2Handler {
+func NewHTTP2Handler(handler apicommon.Handler, logger *slog.Logger) *HTTP2Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -151,7 +151,7 @@ func (h *HTTP2Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 
 type requestState struct {
 	headers           map[string][]string
-	headerFields      []api.HeaderField
+	headerFields      []apicommon.HeaderField
 	method            string
 	path              string
 	authority         string
@@ -165,9 +165,9 @@ func (r *requestState) addHeaders(fields []HeaderField) {
 	if r.headers == nil {
 		r.headers = make(map[string][]string)
 	}
-	r.headerFields = make([]api.HeaderField, 0, len(fields))
+	r.headerFields = make([]apicommon.HeaderField, 0, len(fields))
 	for _, field := range fields {
-		r.headerFields = append(r.headerFields, api.HeaderField{Name: field.Name, Value: field.Value})
+		r.headerFields = append(r.headerFields, apicommon.HeaderField{Name: field.Name, Value: field.Value})
 		if strings.HasPrefix(field.Name, ":") {
 			switch field.Name {
 			case ":method":
@@ -209,7 +209,7 @@ func readHeaderBlock(framer *http2.Framer, first *http2.HeadersFrame) ([]byte, i
 func (h *HTTP2Handler) respondHTTP2Request(framer *http2.Framer, writer *bufio.Writer, streamID uint32, connection capture.ConnectionInfo, clientHello *tlsfp.ClientHello, tlsInfo capture.TLSInfo, http2Info capture.HTTP2Info, clientPort int, request *requestState) error {
 	path := stripQuery(request.path)
 	headers := normalizeHeaderMap(request.headers)
-	response := h.handler.Handle(api.RequestContext{
+	response := h.handler.Handle(apicommon.RequestContext{
 		Connection:  connection,
 		ClientHello: clientHello,
 		TLS:         tlsInfo,
@@ -217,10 +217,10 @@ func (h *HTTP2Handler) respondHTTP2Request(framer *http2.Framer, writer *bufio.W
 		Protocol:    "h2",
 		Host:        request.authority,
 		ClientPort:  clientPort,
-		HTTP2Req: api.HTTP2RequestInfo{
+		HTTP2Req: apicommon.HTTP2RequestInfo{
 			StreamID:          request.streamID,
 			HeaderBlockLength: request.headerBlockLength,
-			HeaderFields:      append([]api.HeaderField(nil), request.headerFields...),
+			HeaderFields:      append([]apicommon.HeaderField(nil), request.headerFields...),
 			EndStream:         request.endStream,
 		},
 		Method:  request.method,
@@ -257,7 +257,7 @@ func (h *HTTP2Handler) respondHTTP2Request(framer *http2.Framer, writer *bufio.W
 	return writer.Flush()
 }
 
-func encodeResponseHeaders(response api.Response, contentLength int) ([]byte, error) {
+func encodeResponseHeaders(response apicommon.Response, contentLength int) ([]byte, error) {
 	var buffer bytes.Buffer
 	encoder := hpack.NewEncoder(&buffer)
 	fields := []HeaderField{{Name: ":status", Value: strconv.Itoa(response.StatusCode)}}

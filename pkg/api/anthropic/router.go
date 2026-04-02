@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"tlsident/pkg/api"
+	apicommon "tlsident/pkg/api/common"
 	"tlsident/pkg/capture"
 	"tlsident/pkg/version"
 )
@@ -26,7 +26,7 @@ func NewService(store *capture.Store, logger *slog.Logger) *Service {
 	return &Service{store: store, logger: logger}
 }
 
-func (s *Service) Handle(ctx api.RequestContext) api.Response {
+func (s *Service) Handle(ctx apicommon.RequestContext) apicommon.Response {
 	switch {
 	case ctx.Method == "GET" && ctx.Path == "/captures":
 		return jsonResponse(200, s.store.Snapshot())
@@ -48,7 +48,7 @@ func (s *Service) Handle(ctx api.RequestContext) api.Response {
 	}
 }
 
-func (s *Service) handleMessages(ctx api.RequestContext) api.Response {
+func (s *Service) handleMessages(ctx apicommon.RequestContext) apicommon.Response {
 	payload := parseJSON(ctx.Body)
 	model, _ := payload["model"].(string)
 	stream := streamRequested(payload, ctx.Headers)
@@ -70,7 +70,7 @@ func (s *Service) handleMessages(ctx api.RequestContext) api.Response {
 	pretty := mustJSON(snapshot)
 
 	if stream {
-		return api.Response{
+		return apicommon.Response{
 			StatusCode: 200,
 			Headers: map[string]string{
 				"content-type":                "text/event-stream",
@@ -244,9 +244,9 @@ func writeSSE(buf *bytes.Buffer, event string, payload any) {
 	buf.WriteString("\n\n")
 }
 
-func jsonResponse(status int, payload any) api.Response {
+func jsonResponse(status int, payload any) apicommon.Response {
 	body, _ := json.Marshal(payload)
-	return api.Response{
+	return apicommon.Response{
 		StatusCode: status,
 		Headers: map[string]string{
 			"content-type":           "application/json",

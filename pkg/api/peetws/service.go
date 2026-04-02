@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tlsident/pkg/api"
+	apicommon "tlsident/pkg/api/common"
 	"tlsident/pkg/tlsfp"
 )
 
@@ -23,7 +23,7 @@ func NewService() *Service {
 	return &Service{}
 }
 
-func (s *Service) Handle(ctx api.RequestContext) api.Response {
+func (s *Service) Handle(ctx apicommon.RequestContext) apicommon.Response {
 	switch {
 	case ctx.Method != "GET":
 		return jsonResponse(405, map[string]string{"error": "method not allowed"})
@@ -102,7 +102,7 @@ type tcpipResponse struct {
 	TCP     map[string]any `json:"tcp"`
 }
 
-func buildAllResponse(ctx api.RequestContext) allResponse {
+func buildAllResponse(ctx apicommon.RequestContext) allResponse {
 	response := allResponse{
 		Donate:      donateMessage,
 		IP:          remoteAddress(ctx.Connection.ClientIP, ctx.ClientPort),
@@ -123,7 +123,7 @@ func buildAllResponse(ctx api.RequestContext) allResponse {
 	return response
 }
 
-func buildCleanResponse(ctx api.RequestContext) cleanResponse {
+func buildCleanResponse(ctx apicommon.RequestContext) cleanResponse {
 	akamai := "-"
 	akamaiHash := "-"
 	if ctx.Protocol == "h2" {
@@ -145,7 +145,7 @@ func buildCleanResponse(ctx api.RequestContext) cleanResponse {
 	}
 }
 
-func buildTLSOnlyResponse(ctx api.RequestContext) tlsOnlyResponse {
+func buildTLSOnlyResponse(ctx apicommon.RequestContext) tlsOnlyResponse {
 	return tlsOnlyResponse{
 		Donate:      "",
 		IP:          "",
@@ -156,7 +156,7 @@ func buildTLSOnlyResponse(ctx api.RequestContext) tlsOnlyResponse {
 	}
 }
 
-func buildTLSResponse(ctx api.RequestContext) tlsResponse {
+func buildTLSResponse(ctx apicommon.RequestContext) tlsResponse {
 	hello := ctx.ClientHello
 
 	ja4r := ""
@@ -188,7 +188,7 @@ func buildTLSResponse(ctx api.RequestContext) tlsResponse {
 	}
 }
 
-func buildHTTP2Response(ctx api.RequestContext) http2Response {
+func buildHTTP2Response(ctx apicommon.RequestContext) http2Response {
 	frames := make([]map[string]any, 0, 3)
 	settings, increment := parseAkamaiFingerprint(ctx.HTTP2.Fingerprint)
 
@@ -235,7 +235,7 @@ func buildHTTP2Response(ctx api.RequestContext) http2Response {
 	}
 }
 
-func buildPeetprint(ctx api.RequestContext, hello *tlsfp.ClientHello) string {
+func buildPeetprint(ctx apicommon.RequestContext, hello *tlsfp.ClientHello) string {
 	if hello == nil {
 		return ""
 	}
@@ -598,9 +598,9 @@ func firstHeader(headers map[string][]string, key string) string {
 	return values[0]
 }
 
-func jsonResponse(status int, payload any) api.Response {
+func jsonResponse(status int, payload any) apicommon.Response {
 	body, _ := json.Marshal(payload)
-	return api.Response{
+	return apicommon.Response{
 		StatusCode: status,
 		Headers: map[string]string{
 			"content-type":           "application/json",
