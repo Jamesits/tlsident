@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
 local_dir="${1:?usage: compare-sub2api.sh <local-results-dir> <upstream-json> <artifact-dir>}"
 upstream_json="${2:?usage: compare-sub2api.sh <local-results-dir> <upstream-json> <artifact-dir>}"
