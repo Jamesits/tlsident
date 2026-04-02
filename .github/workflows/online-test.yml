@@ -21,6 +21,11 @@ jobs:
       ONLINE_TEST_DIR: ./online-test
       UPSTREAM_AFTER_JSON: ./online-test/upstream-after.json
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -93,14 +98,14 @@ jobs:
           export ANTHROPIC_AUTH_TOKEN="$(openssl rand -hex 16)"
 
           BEFORE_JSON="$ONLINE_TEST_DIR/upstream-before.json"
-          curl -fsSL "https://tls.sub2api.org/api/latest?token=${SUB2API_API_TOKEN}" -o "$BEFORE_JSON"
+          curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "$BEFORE_JSON"
           baseline_id="$(jq -r '.fingerprints[0].id // empty' "$BEFORE_JSON")"
 
           claude -p --output-format json "test" > "$ONLINE_TEST_DIR/upstream-claude.json"
           sleep 3
 
           for _ in $(seq 1 20); do
-            curl -fsSL "https://tls.sub2api.org/api/latest?token=${SUB2API_API_TOKEN}" -o "$UPSTREAM_AFTER_JSON"
+            curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "$UPSTREAM_AFTER_JSON"
             latest_id="$(jq -r '.fingerprints[0].id // empty' "$UPSTREAM_AFTER_JSON")"
             latest_count="$(jq -r '.count // 0' "$UPSTREAM_AFTER_JSON")"
 
