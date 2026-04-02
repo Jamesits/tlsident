@@ -19,6 +19,7 @@ jobs:
     env:
       LOCAL_RESULTS_DIR: ./local-results
       ONLINE_TEST_DIR: ./online-test
+      LOCAL_BASE_URL: https://tls.sub2api.org:8090
       UPSTREAM_AFTER_JSON: ./online-test/upstream-after.json
     steps:
       - name: Harden Runner
@@ -54,6 +55,8 @@ jobs:
           set -euo pipefail
 
           mkdir -p "$LOCAL_RESULTS_DIR" "$ONLINE_TEST_DIR"
+          sudo cp /etc/hosts "$ONLINE_TEST_DIR/hosts.original"
+          printf '127.0.0.1 tls.sub2api.org\n' | sudo tee -a /etc/hosts > /dev/null
 
           TLSIDENT_BIN="$(find dist -type f -path '*linux_amd64*' -name tlsident | head -n 1)"
           if [ -z "$TLSIDENT_BIN" ]; then
@@ -62,11 +65,11 @@ jobs:
           fi
 
           chmod +x "$TLSIDENT_BIN"
-          "$TLSIDENT_BIN" -outdir "$LOCAL_RESULTS_DIR" > "$ONLINE_TEST_DIR/tlsident.log" 2>&1 &
+          "$TLSIDENT_BIN" -listen :8090 -outdir "$LOCAL_RESULTS_DIR" > "$ONLINE_TEST_DIR/tlsident.log" 2>&1 &
           echo $! > "$ONLINE_TEST_DIR/tlsident.pid"
 
           for _ in $(seq 1 20); do
-            if curl -ksSf https://localhost:8443/captures > /dev/null; then
+            if curl -ksSf "$LOCAL_BASE_URL/captures" > /dev/null; then
               exit 0
             fi
             sleep 1
@@ -78,7 +81,7 @@ jobs:
       - name: Capture local fingerprints
         shell: bash
         env:
-          ANTHROPIC_BASE_URL: https://localhost:8443
+          ANTHROPIC_BASE_URL: ${{ env.LOCAL_BASE_URL }}
           ANTHROPIC_AUTH_TOKEN: 'dummy'
           DISABLE_AUTOUPDATER: '1'
           NODE_TLS_REJECT_UNAUTHORIZED: '0'
@@ -86,6 +89,12 @@ jobs:
           set -euo pipefail
           claude --bare -p "test" --no-session-persistence --output-format json > "$ONLINE_TEST_DIR/local-claude.json" || true
           find "$LOCAL_RESULTS_DIR" -maxdepth 1 -type f -name '*.sub2api.json' | grep -q .
+
+      - name: Restore public tls.sub2api.org resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo cp "$ONLINE_TEST_DIR/hosts.original" /etc/hosts
 
       - name: Capture upstream fingerprints
         shell: bash
@@ -128,6 +137,9 @@ jobs:
         if: always()
         shell: bash
         run: |
+          if [ -f "$ONLINE_TEST_DIR/hosts.original" ]; then
+            sudo cp "$ONLINE_TEST_DIR/hosts.original" /etc/hosts
+          fi
           if [ -f "$ONLINE_TEST_DIR/tlsident.pid" ]; then
             kill "$(cat "$ONLINE_TEST_DIR/tlsident.pid")" || true
           fi
