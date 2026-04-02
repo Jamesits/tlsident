@@ -55,10 +55,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      # - name: Harden Runner
-      #   uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
-      #   with:
-      #     egress-policy: audit
+      - name: Harden Runner
+        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
+        with:
+          egress-policy: audit
 
       - uses: actions/checkout@v6
 
@@ -100,7 +100,7 @@ jobs:
           trap cleanup EXIT
           sleep 3
 
-          claude --bare -p "test" --no-session-persistence || true
+          http_proxy='' https_proxy='' all_proxy='' claude --bare -p "test" --no-session-persistence || true
 
       - name: Run upstream capture
         shell: bash
@@ -120,7 +120,7 @@ jobs:
             exit 1
           fi
 
-          claude --bare -p "test" --no-session-persistence || true
+          http_proxy='' https_proxy='' all_proxy='' claude --bare -p "test" --no-session-persistence || true
           sleep 3
 
           curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "./upstream.json"
