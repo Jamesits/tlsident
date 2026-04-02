@@ -15,18 +15,32 @@ import (
 
 type ClientHello struct {
 	LegacyVersion       uint16
+	Random              []byte
+	SessionID           []byte
 	ServerName          string
 	CipherSuites        []uint16
 	Extensions          []uint16
+	RawExtensions       []Extension
 	Curves              []uint16
 	PointFormats        []uint8
 	SignatureAlgorithms []uint16
 	ALPNProtocols       []string
 	SupportedVersions   []uint16
 	KeyShareGroups      []uint16
+	KeyShares           []KeyShare
 	PSKModes            []uint8
 	CompressCertAlgos   []uint16
 	EnableGREASE        bool
+}
+
+type Extension struct {
+	Type uint16
+	Data []byte
+}
+
+type KeyShare struct {
+	Group uint16
+	Data  []byte
 }
 
 func ParseClientHello(message []byte) (*ClientHello, error) {
@@ -36,6 +50,7 @@ func ParseClientHello(message []byte) (*ClientHello, error) {
 
 	parsed := &ClientHello{}
 	parsed.LegacyVersion = binary.BigEndian.Uint16(message[:2])
+	parsed.Random = append([]byte(nil), message[2:34]...)
 	offset := 2 + 32
 
 	sessionIDLen := int(message[offset])
@@ -43,6 +58,7 @@ func ParseClientHello(message []byte) (*ClientHello, error) {
 	if offset+sessionIDLen > len(message) {
 		return nil, fmt.Errorf("invalid session id length")
 	}
+	parsed.SessionID = append(parsed.SessionID, message[offset:offset+sessionIDLen]...)
 	offset += sessionIDLen
 
 	if offset+2 > len(message) {
@@ -94,6 +110,10 @@ func ParseClientHello(message []byte) (*ClientHello, error) {
 		}
 
 		parsed.Extensions = append(parsed.Extensions, extType)
+		parsed.RawExtensions = append(parsed.RawExtensions, Extension{
+			Type: extType,
+			Data: append([]byte(nil), message[offset:offset+extLen]...),
+		})
 		if IsGREASE16(extType) {
 			parsed.EnableGREASE = true
 		}
@@ -292,6 +312,10 @@ func parseKeyShare(parsed *ClientHello, payload []byte) error {
 			return fmt.Errorf("invalid key share entry")
 		}
 		parsed.KeyShareGroups = append(parsed.KeyShareGroups, group)
+		parsed.KeyShares = append(parsed.KeyShares, KeyShare{
+			Group: group,
+			Data:  append([]byte(nil), payload[offset:offset+exchangeLen]...),
+		})
 		if IsGREASE16(group) {
 			parsed.EnableGREASE = true
 		}
@@ -345,6 +369,18 @@ func (hello *ClientHello) JA4() string {
 	cipherHash := hashListOrZeros(hello.sortedCipherHex())
 	extensionHash := hashListOrZeros(hello.extensionSignatureString())
 	return fmt.Sprintf("t%s%s%s%s%s_%s_%s", versionCode, sniCode, cipherCount, extensionCount, alpnCode, cipherHash, extensionHash)
+}
+
+func (hello *ClientHello) JA4R() string {
+	versionCode := ja4VersionCode(hello.effectiveVersion())
+	sniCode := "i"
+	if hello.ServerName != "" {
+		sniCode = "d"
+	}
+	cipherCount := min2Digits(len(hello.ciphersWithoutGREASE()))
+	extensionCount := min2Digits(len(hello.extensionsWithoutGREASE()))
+	alpnCode := ja4ALPNCode(hello.ALPNProtocols)
+	return fmt.Sprintf("t%s%s%s%s%s_%s_%s", versionCode, sniCode, cipherCount, extensionCount, alpnCode, hello.sortedCipherHex(), hello.extensionSignatureString())
 }
 
 func (hello *ClientHello) effectiveVersion() uint16 {

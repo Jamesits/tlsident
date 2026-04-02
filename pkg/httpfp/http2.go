@@ -15,6 +15,7 @@ import (
 
 	"tlsident/pkg/api"
 	"tlsident/pkg/capture"
+	"tlsident/pkg/tlsfp"
 )
 
 const clientPreface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
@@ -31,7 +32,7 @@ func NewHTTP2Handler(handler api.Handler, logger *slog.Logger) *HTTP2Handler {
 	return &HTTP2Handler{handler: handler, logger: logger}
 }
 
-func (h *HTTP2Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, tlsInfo capture.TLSInfo) error {
+func (h *HTTP2Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, clientHello *tlsfp.ClientHello, tlsInfo capture.TLSInfo, clientPort int) error {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
@@ -92,7 +93,7 @@ func (h *HTTP2Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 		case *http2.PriorityFrame:
 			tracker.RecordPriority(PriorityFrame{StreamID: frame.Header().StreamID, PriorityParam: frame.PriorityParam})
 		case *http2.HeadersFrame:
-			block, err := readHeaderBlock(framer, frame)
+			block, blockLen, err := readHeaderBlock(framer, frame)
 			if err != nil {
 				return err
 			}
@@ -107,9 +108,12 @@ func (h *HTTP2Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 				requests[frame.Header().StreamID] = request
 			}
 			request.addHeaders(emitted)
+			request.streamID = frame.Header().StreamID
+			request.headerBlockLength = blockLen
+			request.endStream = frame.StreamEnded()
 			tracker.RecordPseudoHeaderOrder(emitted)
 			if frame.StreamEnded() {
-				if err := h.respondHTTP2Request(framer, writer, frame.Header().StreamID, connection, tlsInfo, tracker.Snapshot(), request); err != nil {
+				if err := h.respondHTTP2Request(framer, writer, frame.Header().StreamID, connection, clientHello, tlsInfo, tracker.Snapshot(), clientPort, request); err != nil {
 					return err
 				}
 				delete(requests, frame.Header().StreamID)
@@ -121,8 +125,9 @@ func (h *HTTP2Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 				requests[frame.Header().StreamID] = request
 			}
 			request.body.Write(frame.Data())
+			request.endStream = frame.StreamEnded()
 			if frame.StreamEnded() {
-				if err := h.respondHTTP2Request(framer, writer, frame.Header().StreamID, connection, tlsInfo, tracker.Snapshot(), request); err != nil {
+				if err := h.respondHTTP2Request(framer, writer, frame.Header().StreamID, connection, clientHello, tlsInfo, tracker.Snapshot(), clientPort, request); err != nil {
 					return err
 				}
 				delete(requests, frame.Header().StreamID)
@@ -145,23 +150,32 @@ func (h *HTTP2Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 }
 
 type requestState struct {
-	headers map[string][]string
-	method  string
-	path    string
-	body    bytes.Buffer
+	headers           map[string][]string
+	headerFields      []api.HeaderField
+	method            string
+	path              string
+	authority         string
+	streamID          uint32
+	headerBlockLength int
+	endStream         bool
+	body              bytes.Buffer
 }
 
 func (r *requestState) addHeaders(fields []HeaderField) {
 	if r.headers == nil {
 		r.headers = make(map[string][]string)
 	}
+	r.headerFields = make([]api.HeaderField, 0, len(fields))
 	for _, field := range fields {
+		r.headerFields = append(r.headerFields, api.HeaderField{Name: field.Name, Value: field.Value})
 		if strings.HasPrefix(field.Name, ":") {
 			switch field.Name {
 			case ":method":
 				r.method = field.Value
 			case ":path":
 				r.path = field.Value
+			case ":authority":
+				r.authority = field.Value
 			}
 			continue
 		}
@@ -169,40 +183,50 @@ func (r *requestState) addHeaders(fields []HeaderField) {
 	}
 }
 
-func readHeaderBlock(framer *http2.Framer, first *http2.HeadersFrame) ([]byte, error) {
+func readHeaderBlock(framer *http2.Framer, first *http2.HeadersFrame) ([]byte, int, error) {
 	var block bytes.Buffer
 	block.Write(first.HeaderBlockFragment())
 	if first.HeadersEnded() {
-		return block.Bytes(), nil
+		return block.Bytes(), block.Len(), nil
 	}
 	streamID := first.Header().StreamID
 	for {
 		frame, err := framer.ReadFrame()
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		continuation, ok := frame.(*http2.ContinuationFrame)
 		if !ok || continuation.Header().StreamID != streamID {
-			return nil, fmt.Errorf("expected continuation frame")
+			return nil, 0, fmt.Errorf("expected continuation frame")
 		}
 		block.Write(continuation.HeaderBlockFragment())
 		if continuation.HeadersEnded() {
-			return block.Bytes(), nil
+			return block.Bytes(), block.Len(), nil
 		}
 	}
 }
 
-func (h *HTTP2Handler) respondHTTP2Request(framer *http2.Framer, writer *bufio.Writer, streamID uint32, connection capture.ConnectionInfo, tlsInfo capture.TLSInfo, http2Info capture.HTTP2Info, request *requestState) error {
+func (h *HTTP2Handler) respondHTTP2Request(framer *http2.Framer, writer *bufio.Writer, streamID uint32, connection capture.ConnectionInfo, clientHello *tlsfp.ClientHello, tlsInfo capture.TLSInfo, http2Info capture.HTTP2Info, clientPort int, request *requestState) error {
 	path := stripQuery(request.path)
 	headers := normalizeHeaderMap(request.headers)
 	response := h.handler.Handle(api.RequestContext{
-		Connection: connection,
-		TLS:        tlsInfo,
-		HTTP2:      http2Info,
-		Method:     request.method,
-		Path:       path,
-		Headers:    headers,
-		Body:       request.body.Bytes(),
+		Connection:  connection,
+		ClientHello: clientHello,
+		TLS:         tlsInfo,
+		HTTP2:       http2Info,
+		Protocol:    "h2",
+		Host:        request.authority,
+		ClientPort:  clientPort,
+		HTTP2Req: api.HTTP2RequestInfo{
+			StreamID:          request.streamID,
+			HeaderBlockLength: request.headerBlockLength,
+			HeaderFields:      append([]api.HeaderField(nil), request.headerFields...),
+			EndStream:         request.endStream,
+		},
+		Method:  request.method,
+		Path:    path,
+		Headers: headers,
+		Body:    request.body.Bytes(),
 	})
 	h.logger.Info("http request",
 		"protocol", "h2",

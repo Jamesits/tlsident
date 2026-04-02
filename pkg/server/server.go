@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
 	"tlsident/pkg/api"
 	"tlsident/pkg/api/anthropic"
+	"tlsident/pkg/api/peetws"
 	"tlsident/pkg/capture"
 	"tlsident/pkg/certutil"
 	"tlsident/pkg/httpfp"
@@ -53,7 +55,10 @@ func New(config Config) (*Server, error) {
 	}
 
 	store := capture.NewStore(writer)
-	handler := anthropic.NewService(store, config.Logger)
+	handler := api.NewRouter(
+		anthropic.NewService(store, config.Logger),
+		peetws.NewService(),
+	)
 
 	return &Server{
 		config: config,
@@ -138,14 +143,15 @@ func (s *Server) handleConnection(conn *tlsfp.ObservedConn) {
 
 	tlsInfo := clientHello.CaptureTLSInfo()
 	connectionInfo := conn.ConnectionInfo()
+	clientPort := remotePort(conn.RemoteAddr())
 
 	switch tlsConn.ConnectionState().NegotiatedProtocol {
 	case "h2":
-		if err := s.http2Handler.Serve(tlsConn, connectionInfo, tlsInfo); err != nil {
+		if err := s.http2Handler.Serve(tlsConn, connectionInfo, clientHello, tlsInfo, clientPort); err != nil {
 			s.config.Logger.Error("http/2 connection error", "client_ip", connectionInfo.ClientIP, "err", err)
 		}
 	default:
-		if err := s.http1Handler.Serve(tlsConn, connectionInfo, tlsInfo); err != nil {
+		if err := s.http1Handler.Serve(tlsConn, connectionInfo, clientHello, tlsInfo, clientPort); err != nil {
 			s.config.Logger.Error("http/1.1 connection error", "client_ip", connectionInfo.ClientIP, "err", err)
 		}
 	}
@@ -159,4 +165,19 @@ func normalizeAddress(address string) string {
 		return address
 	}
 	return ":" + address
+}
+
+func remotePort(addr net.Addr) int {
+	if addr == nil {
+		return 0
+	}
+	_, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return 0
+	}
+	value, err := strconv.Atoi(port)
+	if err != nil {
+		return 0
+	}
+	return value
 }

@@ -8,11 +8,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/textproto"
+	"sort"
 	"strings"
 	"time"
 
 	"tlsident/pkg/api"
 	"tlsident/pkg/capture"
+	"tlsident/pkg/tlsfp"
 )
 
 type HTTP1Handler struct {
@@ -27,7 +30,7 @@ func NewHTTP1Handler(handler api.Handler, logger *slog.Logger) *HTTP1Handler {
 	return &HTTP1Handler{handler: handler, logger: logger}
 }
 
-func (h *HTTP1Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, tlsInfo capture.TLSInfo) error {
+func (h *HTTP1Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, clientHello *tlsfp.ClientHello, tlsInfo capture.TLSInfo, clientPort int) error {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
@@ -50,13 +53,20 @@ func (h *HTTP1Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 		}
 
 		response := h.handler.Handle(api.RequestContext{
-			Connection: connection,
-			TLS:        tlsInfo,
-			HTTP2:      capture.HTTP2Info{Fingerprint: "|00|0|"},
-			Method:     request.Method,
-			Path:       request.URL.Path,
-			Headers:    normalizeHeaderMap(request.Header),
-			Body:       body,
+			Connection:  connection,
+			ClientHello: clientHello,
+			TLS:         tlsInfo,
+			HTTP2:       capture.HTTP2Info{Fingerprint: "|00|0|"},
+			Protocol:    "HTTP/1.1",
+			Host:        request.Host,
+			ClientPort:  clientPort,
+			HTTP1: api.HTTP1RequestInfo{
+				HeaderLines: http1HeaderLines(request),
+			},
+			Method:  request.Method,
+			Path:    request.URL.Path,
+			Headers: normalizeHeaderMap(request.Header),
+			Body:    body,
 		})
 		h.logger.Info("http request",
 			"protocol", "http/1.1",
@@ -96,4 +106,26 @@ func (h *HTTP1Handler) Serve(conn *tls.Conn, connection capture.ConnectionInfo, 
 			return nil
 		}
 	}
+}
+
+func http1HeaderLines(request *http.Request) []string {
+	lines := make([]string, 0, len(request.Header)+1)
+	if request.Host != "" {
+		lines = append(lines, "Host: "+request.Host)
+	}
+
+	keys := make([]string, 0, len(request.Header))
+	for key := range request.Header {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		canonical := textproto.CanonicalMIMEHeaderKey(key)
+		for _, value := range request.Header[key] {
+			lines = append(lines, canonical+": "+value)
+		}
+	}
+
+	return lines
 }
