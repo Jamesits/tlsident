@@ -122,6 +122,7 @@ jobs:
           fi
 
           # Note: if HTTP proxy is enabled, upstream API will fail to capture TLS extension 21 (client hello padding).
+          env | grep proxy
           http_proxy='' https_proxy='' all_proxy='' claude --bare -p "test" --no-session-persistence || true
           sleep 3
 
