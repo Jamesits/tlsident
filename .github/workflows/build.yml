@@ -52,8 +52,6 @@ jobs:
     name: Validate
     needs: build
     if: ${{ needs.build.result == 'success' && github.event_name == 'push' }}
-    # FIXME: upstream currently ignores TLS extension 21 (Padding), so this job will always fail. Re-enable the failure condition once the issue is resolved.
-    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -128,6 +126,8 @@ jobs:
           curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "./upstream.json"
 
       - name: Compare normalized fingerprints
+        # FIXME: upstream currently ignores TLS extension 21 (Padding), so this job will always fail. Re-enable the failure condition once the issue is resolved.
+        continue-on-error: true
         shell: bash
         run: bash ./.github/scripts/compare-sub2api.sh "./results" "./upstream.json"
 
