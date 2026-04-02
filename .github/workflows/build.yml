@@ -101,7 +101,7 @@ jobs:
           trap cleanup EXIT
           sleep 3
 
-          http_proxy='' https_proxy='' all_proxy='' claude --bare -p "test" --no-session-persistence || true
+          claude --bare -p "test" --no-session-persistence || true
 
       - name: Run upstream capture
         shell: bash
@@ -122,8 +122,7 @@ jobs:
           fi
 
           # Note: if HTTP proxy is enabled, upstream API will fail to capture TLS extension 21 (client hello padding).
-          env | grep -i proxy
-          http_proxy='' https_proxy='' all_proxy='' claude --bare -p "test" --no-session-persistence || true
+          claude --bare -p "test" --no-session-persistence || true
           sleep 3
 
           curl -fsSL "https://tls.sub2api.org/api/latest?token=${ANTHROPIC_AUTH_TOKEN}" -o "./upstream.json"
