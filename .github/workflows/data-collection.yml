@@ -223,3 +223,40 @@ jobs:
           path: |
             results
           if-no-files-found: error
+
+  merge-sub2api-yaml:
+    name: Merge Sub2API YAML results
+    if: always()
+    needs:
+      - hosted
+      - linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download matrix result artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*-results'
+          path: collected-results
+
+      - name: Merge Sub2API YAML files
+        run: |
+          mkdir -p merged-results
+          mapfile -t yaml_files < <(find collected-results -type f -name '*.sub2api.yml' | sort)
+          if [ "${#yaml_files[@]}" -eq 0 ]; then
+            echo "No .sub2api.yml files found in matrix artifacts" >&2
+            exit 1
+          fi
+
+          output_file="merged-results/all.sub2api.yml"
+          : > "$output_file"
+          for yaml_file in "${yaml_files[@]}"; do
+            cat "$yaml_file" >> "$output_file"
+            printf '\n' >> "$output_file"
+          done
+
+      - name: Upload merged Sub2API YAML
+        uses: actions/upload-artifact@v7
+        with:
+          name: sub2api-yaml
+          path: merged-results/all.sub2api.yml
+          if-no-files-found: error
