@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      LOCAL_RESULTS_DIR: ${{ runner.temp }}/local-results
-      ONLINE_TEST_DIR: ${{ runner.temp }}/online-test
-      UPSTREAM_AFTER_JSON: ${{ runner.temp }}/online-test/upstream-after.json
+      LOCAL_RESULTS_DIR: ./local-results
+      ONLINE_TEST_DIR: ./online-test
+      UPSTREAM_AFTER_JSON: ./online-test/upstream-after.json
     steps:
       - uses: actions/checkout@v6
         with:
@@ -132,5 +132,5 @@ jobs:
         with:
           name: online-test-artifacts
           path: |
-            ${{ runner.temp }}/local-results
-            ${{ runner.temp }}/online-test
+            ./local-results
+            ./online-test

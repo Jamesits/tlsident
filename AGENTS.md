@@ -30,3 +30,4 @@ goreleaser release --snapshot --clean
 ## Code Style
 
 - DO NOT write unit tests
+- GitHub workflow should use artifacts from the build workflow
