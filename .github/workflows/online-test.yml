@@ -56,6 +56,7 @@ jobs:
 
           mkdir -p "$LOCAL_RESULTS_DIR" "$ONLINE_TEST_DIR"
           sudo cp /etc/hosts "$ONLINE_TEST_DIR/hosts.original"
+          test -s "$ONLINE_TEST_DIR/hosts.original"
           printf '127.0.0.1 tls.sub2api.org\n' | sudo tee -a /etc/hosts > /dev/null
 
           TLSIDENT_BIN="$(find dist -type f -path '*linux_amd64*' -name tlsident | head -n 1)"
@@ -94,7 +95,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -s "$ONLINE_TEST_DIR/hosts.original"
           sudo cp "$ONLINE_TEST_DIR/hosts.original" /etc/hosts
+          if grep -qE '^[^#]*[[:space:]]tls\.sub2api\.org([[:space:]]|$)' /etc/hosts; then
+            echo "failed to restore /etc/hosts before upstream capture" >&2
+            exit 1
+          fi
 
       - name: Capture upstream fingerprints
         shell: bash
@@ -138,7 +144,13 @@ jobs:
         shell: bash
         run: |
           if [ -f "$ONLINE_TEST_DIR/hosts.original" ]; then
-            sudo cp "$ONLINE_TEST_DIR/hosts.original" /etc/hosts
+            if sudo cp "$ONLINE_TEST_DIR/hosts.original" /etc/hosts; then
+              if grep -qE '^[^#]*[[:space:]]tls\.sub2api\.org([[:space:]]|$)' /etc/hosts; then
+                echo "warning: tls.sub2api.org override remained in /etc/hosts after cleanup" >&2
+              fi
+            else
+              echo "warning: failed to restore /etc/hosts during cleanup" >&2
+            fi
           fi
           if [ -f "$ONLINE_TEST_DIR/tlsident.pid" ]; then
             kill "$(cat "$ONLINE_TEST_DIR/tlsident.pid")" || true
