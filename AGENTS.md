@@ -23,6 +23,7 @@ Verification after code change:
 go fmt ./...
 # Lint
 golangci-lint run
+go vet ./...
 # Full build
 goreleaser release --snapshot --clean
 ```
