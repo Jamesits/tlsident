@@ -139,6 +139,10 @@ jobs:
             container: ubuntu:24.04
             distro: ubuntu
             install_method: native
+          - name: ubuntu-26.04-native
+            container: ubuntu:26.04
+            distro: ubuntu
+            install_method: native
           - name: archlinux-native
             container: archlinux:latest
             distro: arch
